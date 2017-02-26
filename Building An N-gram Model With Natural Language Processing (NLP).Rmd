@@ -1,0 +1,132 @@
+---
+title: "Building An N-gram Model With Natural Language Processing (NLP)"
+author: "Abhijit Jantre"
+date: "11 February 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE , warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Executive Summary
+#### The goal here is to build simple model for the relationship between words.This is the first step in building a predictive text mining application.Using the exploratory analysis, I am going to build a basic n-gram model for predicting the next word based on the previous 1, 2, or 3 words.Also, my model will handle the unseen n-grams.The process followed in building the model comprises of following steps
+#### 1) Demonstrate that we have downloaded the data and have successfully loaded it in R.
+#### 2) Create a basic report of summary statistics about the data sets
+#### 3) Report any interesting findings that we have amassed so far
+#### 4) Get feedback on the plans for creating a prediction algorithm and Shiny app
+
+### Loading Necessary Libraries
+```{r  warning=FALSE}
+library(NLP)
+library(tm)
+library(fpc)
+library(RColorBrewer)
+library(wordcloud)
+library(ggplot2)
+library(stringi)
+library(data.table)
+```
+
+### Loading The Dataset 
+```{r}
+blogs <- readLines("C:/Data Science/R/Coursera Capstone Project/Final Project Submission/en_US.blogs.txt",encoding = "UTF-8", skipNul = TRUE)
+news <- readLines("C:/Data Science/R/Coursera Capstone Project/Final Project Submission/en_US.news.txt",encoding = "UTF-8", skipNul = TRUE)
+twitter <- readLines("C:/Data Science/R/Coursera Capstone Project/Final Project Submission/en_US.twitter.txt",encoding = "UTF-8", skipNul = TRUE)
+```
+
+### Basic Summary of The Dataset
+```{r  warning=FALSE}
+b <- file.size("C:/Data Science/R/Coursera Capstone Project/Final Project Submission/en_US.blogs.txt")
+n <- file.size("C:/Data Science/R/Coursera Capstone Project/Final Project Submission/en_US.news.txt")
+t <- file.size("C:/Data Science/R/Coursera Capstone Project/Final Project Submission/en_US.twitter.txt")
+m <- matrix(c(NROW(blogs),NROW(news),NROW(twitter),sum(nchar(blogs)),sum(nchar(news)),sum(nchar(twitter)),(b/1024^2),(n/1024^2),(t/1024^2)),byrow = FALSE,nrow=3,ncol=3,dimnames = list(c("blogs","news","twitter"),c("No.Of Lines","No. Of Characters","File Size in Mb")))
+Wordcount <- sapply(list(blogs,news,twitter),stri_stats_latex)['Words',]
+BasicSummary <- cbind(m,Wordcount)
+BasicSummary
+```
+
+### Removing Non-English Words
+```{r}
+blogs <- iconv(blogs,"latin1","ASCII",sub = "")
+news <- iconv(news,"latin1","ASCII",sub = "")
+twitter <- iconv(twitter,"latin1","ASCII",sub = "")
+```
+
+### We will trim the dataset to make it a training dataset & use only 1% of rows in each of the datasets. This is done to operate with less data to start with.
+```{r warning=FALSE}
+factor <- 0.01
+blogs1 <- sample(blogs,round(factor*length(blogs)))
+news1 <- sample(news,round(factor*length(news)))
+twitter1 <- sample(twitter,round(factor*length(twitter)))
+BasicSummary1 <- matrix(c(NROW(blogs1),NROW(news1),NROW(twitter1)),byrow = TRUE,nrow=3,ncol=1,dimnames = list(c("blogs1","news1","twitter1"),"No.Of Rows"))
+BasicSummary1
+```
+
+### Merging The Training / Sample Files & Creating The Corpus
+```{r}
+set.seed(666)
+trainingset <- c(blogs1,news1,twitter1)
+trainingcorpus <- VCorpus(VectorSource(trainingset))
+```
+
+### Preprocessing The 'trainingcorpus' file 
+```{r warning=FALSE}
+preprocess <- function(document){
+    document <- tm_map(document, removePunctuation)
+    document <- tm_map(document, removeNumbers)
+    document <- tm_map(document, stripWhitespace)
+    document <- tm_map(document, content_transformer(tolower))
+    document <- tm_map(document, PlainTextDocument)
+    return(document)
+}
+trainingcorpus <- preprocess(trainingcorpus)
+```
+
+### Creating Tokenizers
+```{r warning=FALSE}
+Unigramtokenizer <- function(x)
+        unlist(lapply(ngrams(words(x), 1), paste, collapse = " "), use.names = FALSE)
+Bigramtokenizer <- function(x)
+        unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
+Trigramtokenizer <-function(x)
+        unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE)
+```
+
+### Creating Document Matrix
+```{r}
+unigramdocumentmatrix <- TermDocumentMatrix(trainingcorpus,control = list(tokenize = Unigramtokenizer))
+bigramdocumentmatrix <- TermDocumentMatrix(trainingcorpus,control = list(tokenize = Bigramtokenizer))
+trigramdocumentmatrix <- TermDocumentMatrix(trainingcorpus,control = list(tokenize = Trigramtokenizer))
+```
+
+### Computing Frequencies
+```{r}
+unigramf <- findFreqTerms(unigramdocumentmatrix,lowfreq =50)
+bigramf <- findFreqTerms(bigramdocumentmatrix,lowfreq = 50)
+trigramf <- findFreqTerms(trigramdocumentmatrix,lowfreq = 50)
+```
+
+### Computing Frequencies For n-grams
+```{r}
+Unigramfreq <- rowSums(as.matrix(unigramdocumentmatrix[unigramf,]))
+Unigramfreq <- data.frame(word=names(Unigramfreq),frequency=Unigramfreq)
+Bigramfreq <- rowSums(as.matrix(bigramdocumentmatrix[bigramf,]))
+Bigramfreq <- data.frame(word=names(Bigramfreq),frequency=Bigramfreq)
+Trigramfreq <- rowSums(as.matrix(trigramdocumentmatrix[trigramf,]))
+Trigramfreq <- data.frame(word=names(Trigramfreq),frequency=Trigramfreq)
+head(Trigramfreq)
+```
+
+### Plotting The Graph
+```{r}
+plotthegraph <- function(data,title,num){
+        df <- data[order(-data$frequency),][1:num,]
+        barplot(df[1:num,]$freq, las = 2, names.arg = df[1:num,]$word,
+        col ="red", main = title,
+        ylab = "Word frequencies",cex.axis =0.8)
+}
+par(mar=c(10,4,4,2))
+plotthegraph(Unigramfreq,"Top Unigrams",20)
+plotthegraph(Bigramfreq,"Top Bigrams",20)
+plotthegraph(Trigramfreq,"Top Trigrams",20)
+```
