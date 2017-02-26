@@ -1,0 +1,117 @@
+---
+title: "Predicting The Next Word"
+author: "Abhijit Jantre"
+date: "20 February 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Loading Necessary Libraries
+```{r  warning= FALSE , comment='hide',message=FALSE}
+library(NLP)
+library(tm)
+library(fpc)
+library(RColorBrewer)
+library(ggplot2)
+library(stringi)
+library(RWeka)
+library(data.table)
+```
+
+### Reading The Table
+```{r}
+ngramtable <- fread("ngrams.txt")
+setkeyv(ngramtable, c('word0', 'word1', 'word2', 'word3', 'freq'))
+```
+
+### Cleaning The Text
+```{r}
+cleanthetext <- function(text){
+        cleanedtext <- tolower(text)
+        cleanedtext <- stripWhitespace(cleanedtext)
+        cleanedtext <- gsub("[^\\p{L}\\s]+", "", cleanedtext, perl=T)
+        return(cleanedtext)
+}
+```
+
+### Spliting The Words In The Text
+```{r}
+splittheword <- function(text){
+        cleanedtext <- cleanthetext(text)
+        splittedtext <- unlist(strsplit(cleanedtext," "))
+        return(splittedtext)
+}
+```
+
+### Single Word Prediction
+```{r}
+singlewordprediction <- function(cleanedtextlist){
+        datatable <- ngramtable[list("-",cleanedtextlist[1])]
+        datatable <- datatable[datatable$word2!="-",]
+        datatable <- datatable[order(datatable$freq,decreasing = TRUE),]
+        
+        duplicate <- duplicated(subset(datatable,select = c("word1","word2")))
+        datatable <- datatable[!duplicate,]
+        
+        alternateprediction = ''
+        if (length(datatable) > 1){alternateprediction <- datatable$word2[2]}
+        
+        guessprediction <- datatable$word2[1]
+        if(is.na(guessprediction)|is.null(guessprediction)){
+                guessprediction <- "Unable to predict the next word"
+        }
+        return(c(guessprediction,alternateprediction))
+}
+```
+
+### Two Words Prediction
+```{r}
+twowordprediction <- function(cleanedtextlist){
+        datatable <- ngramtable[list("-",cleanedtextlist[1],cleanedtextlist[2])]
+        datatable <- datatable[datatable$word3!="-",]
+        datatable <- datatable[order(datatable$freq,decreasing = TRUE),]
+        
+        duplicate <- duplicated(subset(datatable,select = c("word1","word2","word3")))
+        datatable <- datatable[!duplicate,]
+        
+        alternateprediction = ''
+        if (length(datatable) > 1){alternateprediction <- datatable$word3[2]}
+        
+        guessprediction <- datatable$word3[1]
+        if(is.na(guessprediction)|is.null(guessprediction)){
+                guessprediction <- singlewordprediction(cleanedtextlist[2])
+        }
+        return(c(guessprediction,alternateprediction))
+}
+```
+
+### Three Words Predictions
+```{r}
+threewordprediction <- function(cleanedtextlist){
+        datatable <- ngramtable[list("-",cleanedtextlist[1],cleanedtextlist[2],
+                                     cleanedtextlist[3])]
+        datatable <- datatable[datatable$word4!="-",]
+        datatable <- datatable[order(datatable$freq,decreasing = TRUE),]
+        
+        duplicate <- duplicated(subset(datatable,select = 
+                                             c("word1","word2","word3","word4")))
+        datatable <- datatable[!duplicate,]
+        
+        alternateprediction = ''
+        if (length(datatable) > 1){alternateprediction <- datatable$word4[2]}
+        
+        guessprediction <- datatable$word4[1]
+        if(is.na(guessprediction)|is.null(guessprediction)){
+                shortlist <- c(cleanedtextlist[2],cleanedtextlist[3])
+                guessprediction <- twowordprediction(shortlist)
+                if(is.na(guessprediction)|is.null(guessprediction)){
+                        guessprediction <-         
+                                singlewordprediction(cleanedtextlist[3])
+                }
+        }
+        return(c(guessprediction,alternateprediction))
+}
+```
