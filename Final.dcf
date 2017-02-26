@@ -1,0 +1,11 @@
+name: Final
+title: Final
+account: abhijitjantre
+server: shinyapps.io
+appId: 159033
+bundleId: 723498
+url: https://abhijitjantre.shinyapps.io/Final/
+when: 1487936923.51837
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: Predicting The Next Word.Rmd
